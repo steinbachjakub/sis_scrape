@@ -8,12 +8,18 @@ from selenium.webdriver.common.by import By
 from time import sleep
 from bs4 import BeautifulSoup
 import pandas as pd
+import re
 
 
 LOGIN = "steinbaj"
 PASSWORD = "Sedlcanska 18 Praha"
 
-results = []
+results = pd.DataFrame(
+    {"Obor": [],
+     "1. PP": [],
+     "2. PP": [],
+     "Vyučující": []}
+)
 
 with webdriver.Chrome() as driver:
     driver.get("https://student.vscht.cz")
@@ -33,30 +39,29 @@ with webdriver.Chrome() as driver:
     link_grupik_mat.click()
     links_study_groups = driver.find_elements(By.XPATH, "//tr[@class='row5']/td/a[contains (@href, '22aB413001')]")
 
-    for i in range(1):
+    for i in range(len(links_study_groups)):
+    # for i in range(40, 41):
         links_study_groups = driver.find_elements(By.XPATH, "//tr[@class='row5']/td/a[contains (@href, '22aB413001')]")
         links_study_groups[i].click()
         source = driver.page_source
         soup = BeautifulSoup(source, 'html.parser')
         table_info = soup.find("div", text="Informace o skupině").parent
-        teacher = table_info.find("th", text="Vyučující:  ").parent.find("td").text
-        program = soup.find("table", id="table_seznam").find_all("tr")[1].find_all("td")[2].text
+        teacher_text = table_info.find("th", text="Vyučující:  ").parent.find("td").text.replace(u'\xa0', u' ')
+        m = re.search(r"\).*\(", teacher_text)
+        if m:
+            teacher = m.group(0)[1:-2]
+        else:
+            teacher = teacher_text[:teacher_text.find("(") - 1]
+        program = soup.find("table", id="table_seznam").find_all("tr")[1].find_all("td")[2].text.replace(u'\xa0', u'')
         table_results = soup.find("table", id="table_seznam")
-        test_1 = []
-        test_2 = []
+        with open("temp_file.html", "w", encoding="utf-16") as f:
+            f.write(str(table_results))
+        df = pd.read_html("temp_file.html", header=0)[0][["Obor", "1. PP", "2. PP"]].iloc[:-1, :]
+        df["Vyučující"] = teacher
+        results = pd.concat([results, df])
 
-        for row in table_results.find_all("tr")[1:-1]:
-            test_1.append(row.find_all("td")[4].text)
-            test_2.append(row.find_all("td")[5].text)
+    results.to_csv("data.csv", index=False)
 
-        results.append({
-            "teacher": teacher,
-            "group": program,
-            "test_1": test_1,
-            "test_2": test_2
-        })
-    print(results)
-    sleep(2)
 
 
 
